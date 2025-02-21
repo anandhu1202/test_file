@@ -1,0 +1,75 @@
+Exception in callback SyncBase._sync.<locals>.<lambda>() at C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_sync_base.py:111
+handle: <Handle SyncBase._sync.<locals>.<lambda>() at C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_sync_base.py:111>
+Traceback (most recent call last):
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_sync_base.py", line 111, in <lambda>
+    task.add_done_callback(lambda _: g_self.switch())
+                                     ~~~~~~~~~~~~~^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_connection.py", line 444, in _listener_with_error_handler_attached
+    potential_future = listener(params)
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_frame.py", line 101, in <lambda>
+    lambda params: self._on_frame_navigated(params),
+                   ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_frame.py", line 125, in _on_frame_navigated
+    self._page.emit("framenavigated", self)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\pyee\asyncio.py", line 68, in emit
+    return super().emit(event, *args, **kwargs)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\pyee\base.py", line 212, in emit
+    handled = self._call_handlers(event, args, kwargs)
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\pyee\base.py", line 188, in _call_handlers
+    self._emit_run(f, args, kwargs)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\pyee\asyncio.py", line 79, in _emit_run
+    self.emit("error", exc)
+    ~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\pyee\asyncio.py", line 68, in emit
+    return super().emit(event, *args, **kwargs)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\pyee\base.py", line 215, in emit
+    self._emit_handle_potential_error(event, args[0] if args else None)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\pyee\base.py", line 173, in _emit_handle_potential_error
+    raise error
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\pyee\asyncio.py", line 77, in _emit_run
+    coro: Any = f(*args, **kwargs)
+                ~^^^^^^^^^^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_impl_to_api_mapping.py", line 123, in wrapper_func
+    return handler(
+        *list(map(lambda a: self.from_maybe_impl(a), args))[:arg_count]
+    )
+  File "C:\Users\571603\Downloads\Hackathon_Project\test_runner.py", line 175, in <lambda>
+    page.on("framenavigated", lambda _: inject_js(page))
+                                        ~~~~~~~~~^^^^^^
+  File "C:\Users\571603\Downloads\Hackathon_Project\test_runner.py", line 171, in inject_js
+    page.evaluate(js_code)
+    ~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\sync_api\_generated.py", line 8530, in evaluate
+    self._sync(
+    ~~~~~~~~~~^
+        self._impl_obj.evaluate(expression=expression, arg=mapping.to_impl(arg))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_sync_base.py", line 115, in _sync
+    return task.result()
+           ~~~~~~~~~~~^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_page.py", line 467, in evaluate
+    return await self._main_frame.evaluate(expression, arg)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_frame.py", line 278, in evaluate
+    await self._channel.send(
+    ...<5 lines>...
+    )
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_connection.py", line 61, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "C:\Users\571603\AppData\Local\Programs\Python\Python313\Lib\site-packages\playwright\_impl\_connection.py", line 528, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TargetClosedError: Page.evaluate: Target page, context or browser has been closed
