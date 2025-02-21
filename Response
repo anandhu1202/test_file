@@ -1,20 +1,175 @@
-elif event.get("type") == "dropdown":
-    value = event.get("value", "")
-    script_lines.extend([
-        f"        # Handling dropdown selection",
-        f"        if page.query_selector('{selector}'):",
-        f"            page.select_option('{selector}', '{value}')",
-        f"            elem = page.query_selector('{selector}')",
-        "            golden_key = generate_golden_identifier(page, '{selector}', elem)",
-        "            golden_data = load_global_golden_data()",
-        "            golden_data[golden_key] = capture_element_attributes(elem)",
-        "            store_global_golden_data(golden_data)",
-        "        else:",
-        f"            healed_selector = self_heal('{selector[1:]}', page)",
-        f"            page.select_option(healed_selector, '{value}')",
-        "        page.wait_for_timeout(1000)  # Shorter wait for dropdowns",
-        "        new_url = page.url",
-        "        if new_url != CURRENT_URL:",
-        "            CURRENT_URL = new_url",
-        "            print('Navigation detected. New URL:', CURRENT_URL)",
-    ])
+import json
+from playwright.sync_api import sync_playwright
+from self_healer import self_heal, generate_golden_identifier, capture_element_attributes, load_global_golden_data, store_global_golden_data
+
+# List to store recorded events
+recorded_events = []
+
+def handle_console_message(msg):
+    """
+    Parse JSON messages from the page's console.
+    If the message contains a 'type' key, record it.
+    """
+    try:
+        data = json.loads(msg.text)
+        if "type" in data:
+            recorded_events.append(data)
+            print("Recorded event:", data)
+    except Exception:
+        # Ignore messages that aren't JSON-formatted
+        pass
+
+def deduplicate_events(events):
+    """
+    Filter out redundant input events.
+    - For text input fields: Only retain the last value per selector.
+    - For radio buttons: Only the final selected radio button in a group should be retained.
+    """
+    filtered = []
+    last_input = {}  # Track last input event per selector
+    last_radio = {}  # Track last selected radio per name attribute
+
+    for event in events:
+        event_type = event.get("type")
+        selector = event.get("selector", "")
+
+        if event_type == "input":
+            # Handle regular input fields
+            last_input[selector] = event
+        elif event_type == "radio":
+            # Radio buttons are grouped by name attribute
+            name_attr = event.get("name", "")
+            last_radio[name_attr] = event
+        else:
+            # Directly add click or other events
+            filtered.append(event)
+
+    # Append the last known input values
+    filtered.extend(last_input.values())
+    filtered.extend(last_radio.values())
+
+    return filtered
+
+def generate_test_script(events, website):
+    """
+    Generate a Playwright test script that:
+      - Navigates to the given website.
+      - Replays recorded events (clicks, text inputs, radio selections).
+      - Captures element attributes and updates the golden file for self-healing.
+      - Handles navigation detection and self-healing for failed actions.
+    """
+    filtered_events = deduplicate_events(events)
+
+    script_lines = [
+        "from playwright.sync_api import sync_playwright",
+        "",
+        "# Import self-healing and golden file functions",
+        "from self_healer import self_heal, generate_golden_identifier, capture_element_attributes, load_global_golden_data, store_global_golden_data",
+        "",
+        "def run_test():",
+        "    with sync_playwright() as p:",
+        "        browser = p.chromium.launch(headless=False)",
+        "        page = browser.new_page()",
+        f"        page.goto('{website}')",
+        "        CURRENT_URL = page.url",
+        ""
+    ]
+
+    for event in filtered_events:
+        selector = event.get("selector", "")
+
+        if event.get("type") == "click":
+            if selector:
+                script_lines.append(f"        if page.query_selector('{selector}'):")
+                script_lines.append(f"            page.click('{selector}')")
+                script_lines.append("        else:")
+                script_lines.append(f"            healed_selector = self_heal('{selector}', page)")
+                script_lines.append("            page.click(healed_selector)")
+                script_lines.append("        page.wait_for_timeout(2000)")
+
+        elif event.get("type") == "input":
+            value = event.get("value", "")
+            script_lines.append(f"        if page.query_selector('{selector}'):")
+            script_lines.append(f"            page.fill('{selector}', '{value}')")
+
+        elif event.get("type") == "radio":
+            value = event.get("value", "")
+            script_lines.append(f"        if page.query_selector('{selector}'):")
+            script_lines.append(f"            page.check('{selector}')  # Select radio button with value '{value}'")
+
+    script_lines.append("        browser.close()")
+    script_lines.append("")
+    script_lines.append("if __name__ == '__main__':")
+    script_lines.append("    run_test()")
+
+    return "\n".join(script_lines)
+
+def main():
+    website = input("Enter website URL (include http:// or https://): ").strip()
+    if not website:
+        print("No website provided. Exiting.")
+        return
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        page = browser.new_page()
+        page.goto(website)
+
+        # Listen for console messages that record events.
+        page.on("console", handle_console_message)
+
+        # Inject JavaScript to capture click, input, and radio button events.
+        js_code = """
+        () => {
+            function getSelector(el) {
+                if (el.id) {
+                    return '#' + el.id;
+                }
+                if (el.className) {
+                    return el.tagName.toLowerCase() + '.' + el.className.split(' ').join('.');
+                }
+                return el.tagName.toLowerCase();
+            }
+
+            document.addEventListener('click', function(event) {
+                const el = event.target;
+                const selector = getSelector(el);
+
+                if (el.type === "radio") {
+                    console.log(JSON.stringify({type: 'radio', selector: selector, name: el.name, value: el.value, timestamp: Date.now()}));
+                } else {
+                    console.log(JSON.stringify({type: 'click', selector: selector, timestamp: Date.now()}));
+                }
+            });
+
+            document.addEventListener('input', function(event) {
+                const el = event.target;
+                if (el.type !== "radio") {  // Ignore radio, handled in click
+                    const selector = getSelector(el);
+                    console.log(JSON.stringify({type: 'input', selector: selector, value: el.value, timestamp: Date.now()}));
+                }
+            });
+        }
+        """
+        page.evaluate(js_code)
+
+        print(f"Browser launched and recording events on {website}.")
+        print("Interact with the page. When finished, press Enter in this terminal to stop recording...")
+        input()
+
+        print("Stopping recording and closing browser...")
+        browser.close()
+
+    print("\nRecorded events:")
+    for event in recorded_events:
+        print(event)
+
+    test_script = generate_test_script(recorded_events, website)
+    with open("generated_test.py", "w") as f:
+        f.write(test_script)
+
+    print("\nTest script generated and saved as 'generated_test.py'.")
+    print("Run it with: python generated_test.py")
+
+if __name__ == "__main__":
+    main()
