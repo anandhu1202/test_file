@@ -1,175 +1,333 @@
-import json
-from playwright.sync_api import sync_playwright
-from self_healer import self_heal, generate_golden_identifier, capture_element_attributes, load_global_golden_data, store_global_golden_data
-
-# List to store recorded events
-recorded_events = []
-
-def handle_console_message(msg):
-    """
-    Parse JSON messages from the page's console.
-    If the message contains a 'type' key, record it.
-    """
-    try:
-        data = json.loads(msg.text)
-        if "type" in data:
-            recorded_events.append(data)
-            print("Recorded event:", data)
-    except Exception:
-        # Ignore messages that aren't JSON-formatted
-        pass
-
-def deduplicate_events(events):
-    """
-    Filter out redundant input events.
-    - For text input fields: Only retain the last value per selector.
-    - For radio buttons: Only the final selected radio button in a group should be retained.
-    """
-    filtered = []
-    last_input = {}  # Track last input event per selector
-    last_radio = {}  # Track last selected radio per name attribute
-
-    for event in events:
-        event_type = event.get("type")
-        selector = event.get("selector", "")
-
-        if event_type == "input":
-            # Handle regular input fields
-            last_input[selector] = event
-        elif event_type == "radio":
-            # Radio buttons are grouped by name attribute
-            name_attr = event.get("name", "")
-            last_radio[name_attr] = event
-        else:
-            # Directly add click or other events
-            filtered.append(event)
-
-    # Append the last known input values
-    filtered.extend(last_input.values())
-    filtered.extend(last_radio.values())
-
-    return filtered
-
-def generate_test_script(events, website):
-    """
-    Generate a Playwright test script that:
-      - Navigates to the given website.
-      - Replays recorded events (clicks, text inputs, radio selections).
-      - Captures element attributes and updates the golden file for self-healing.
-      - Handles navigation detection and self-healing for failed actions.
-    """
-    filtered_events = deduplicate_events(events)
-
-    script_lines = [
-        "from playwright.sync_api import sync_playwright",
-        "",
-        "# Import self-healing and golden file functions",
-        "from self_healer import self_heal, generate_golden_identifier, capture_element_attributes, load_global_golden_data, store_global_golden_data",
-        "",
-        "def run_test():",
-        "    with sync_playwright() as p:",
-        "        browser = p.chromium.launch(headless=False)",
-        "        page = browser.new_page()",
-        f"        page.goto('{website}')",
-        "        CURRENT_URL = page.url",
-        ""
-    ]
-
-    for event in filtered_events:
-        selector = event.get("selector", "")
-
-        if event.get("type") == "click":
-            if selector:
-                script_lines.append(f"        if page.query_selector('{selector}'):")
-                script_lines.append(f"            page.click('{selector}')")
-                script_lines.append("        else:")
-                script_lines.append(f"            healed_selector = self_heal('{selector}', page)")
-                script_lines.append("            page.click(healed_selector)")
-                script_lines.append("        page.wait_for_timeout(2000)")
-
-        elif event.get("type") == "input":
-            value = event.get("value", "")
-            script_lines.append(f"        if page.query_selector('{selector}'):")
-            script_lines.append(f"            page.fill('{selector}', '{value}')")
-
-        elif event.get("type") == "radio":
-            value = event.get("value", "")
-            script_lines.append(f"        if page.query_selector('{selector}'):")
-            script_lines.append(f"            page.check('{selector}')  # Select radio button with value '{value}'")
-
-    script_lines.append("        browser.close()")
-    script_lines.append("")
-    script_lines.append("if __name__ == '__main__':")
-    script_lines.append("    run_test()")
-
-    return "\n".join(script_lines)
-
-def main():
-    website = input("Enter website URL (include http:// or https://): ").strip()
-    if not website:
-        print("No website provided. Exiting.")
-        return
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        page = browser.new_page()
-        page.goto(website)
-
-        # Listen for console messages that record events.
-        page.on("console", handle_console_message)
-
-        # Inject JavaScript to capture click, input, and radio button events.
-        js_code = """
-        () => {
-            function getSelector(el) {
-                if (el.id) {
-                    return '#' + el.id;
-                }
-                if (el.className) {
-                    return el.tagName.toLowerCase() + '.' + el.className.split(' ').join('.');
-                }
-                return el.tagName.toLowerCase();
+Can you generate a html page very apt for this self healer
+here is the example html page given below 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YourEvent - Registration</title>
+    <style>
+    body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start; /* Changed from center to flex-start */
+        height: 100vh;
+        background-color: #eef2f3;
+        margin: 0;
+        padding-top: 20px; /* Optional: Add some padding if needed */
+    }
+    .header {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+    .container {
+        background: white;
+        padding: 25px;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        width: 360px;
+        text-align: center;
+    }
+    .container h2 {
+        color: #780b76;
+    }
+    input {
+        width: 90%;
+        padding: 12px;
+        margin: 8px 0;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+    }
+    button {
+        background: #2D8C46;
+        color: white;
+        border: none;
+        padding: 12px;
+        width: 100%;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+    button:hover {
+        background: #1f6b34;
+    }
+    .logout-button {
+        background: #ff4b5c;
+        width: auto;
+        padding: 10px 20px;
+    }
+    .logout-button:hover {
+        background: #d43f4a;
+    }
+    .radio-group {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 8px 0;
+    }
+    .radio-group label {
+        margin-right: 20px;
+        font-size: 14px; /* Smaller font size */
+    }
+    .radio-group input {
+        margin-right: 5px;
+        transform: scale(0.8); /* Smaller radio buttons */
+    }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="logout-button" onclick="logout()">Logout</button>
+    </div>
+    <div class="container">
+        <h2>MAXIMUS GCC</h2>
+        <h3>Personal Details</h3>
+        <form id="registrationForm">
+            <input type="text" class="form-field-1" data-testid="employeeId" id="employeeId" placeholder="Employee Id" required>
+            <input type="text" class="form-field-2" data-testid="firstName" id="firstName" placeholder="First Name" required>
+            <input type="text" class="form-field-3" data-testid="lastName" id="lastName" placeholder="Last Name" required>
+            <input type="email" class="form-field-4" data-testid="email" id="email" placeholder="Email Address" required>
+            <div class="radio-group">
+                <p style="margin: 0; padding-right: 10px;">Gender</p>
+                <label><input id = "male" type="radio" name="gender" value="male" required> Male</label>
+                <label><input id = "female" type="radio" name="gender" value="female" required> Female</label>
+                <label><input id = "others" type="radio" name="gender" value="other" required> Other</label>
+            </div>
+            <input type="text" id="address" placeholder="Physical Address">
+            <input type="text" id="pincode" placeholder="Pin Code">
+            <button type="submit">Register</button>
+        </form>
+        <p id="message"></p>
+    </div>
+    <script>
+        document.getElementById('registrationForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            document.getElementById('message').innerText = 'Registration successful!';
+            document.getElementListener('submit', function(event) {
+            event.preventDefault();
+            if (confirm('Registration successful!')) {
+                window.location.href = 'login.html';
             }
+        });
+    </script>
+</body>
+</html>
 
-            document.addEventListener('click', function(event) {
-                const el = event.target;
-                const selector = getSelector(el);
 
-                if (el.type === "radio") {
-                    console.log(JSON.stringify({type: 'radio', selector: selector, name: el.name, value: el.value, timestamp: Date.now()}));
-                } else {
-                    console.log(JSON.stringify({type: 'click', selector: selector, timestamp: Date.now()}));
-                }
-            });
+import os
+import json
+import numpy as np
+from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.by import By
 
-            document.addEventListener('input', function(event) {
-                const el = event.target;
-                if (el.type !== "radio") {  // Ignore radio, handled in click
-                    const selector = getSelector(el);
-                    console.log(JSON.stringify({type: 'input', selector: selector, value: el.value, timestamp: Date.now()}));
-                }
-            });
+# --- Global Settings & Persistence Files ---
+GLOBAL_GOLDEN_FILE = "global_golden.json"
+
+
+# --- Persistence Functions ---
+def load_global_golden_data():
+    if os.path.exists(GLOBAL_GOLDEN_FILE):
+        with open(GLOBAL_GOLDEN_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+
+def store_global_golden_data(data):
+    with open(GLOBAL_GOLDEN_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+# --- Golden Identifier ---
+def generate_golden_identifier(page, original_selector, element=None):
+    """
+    Generates a golden identifier based on the page title and the element's stable attributes.
+    If an element is provided, its attributes are used; otherwise, the sanitized original_selector is used.
+    """
+    page_key = page.title().replace(" ", "_")
+
+    if element:
+        # Prefer data-testid if available
+        candidate = element.get_attribute("data-testid")
+        if candidate:
+            return f"{page_key}_golden_{candidate}"
+
+        # If not, check id or name
+        candidate = element.get_attribute("id") or element.get_attribute("name")
+        if candidate:
+            return f"{page_key}_golden_{candidate}"
+
+        # Or combine tag with class as a composite key
+        candidate_classes = element.get_attribute("class")
+        if candidate_classes:
+            classes = candidate_classes.strip().replace(" ", "_")
+            return f"{page_key}_golden_{element.evaluate('el => el.tagName.toLowerCase()')}_{classes}"
+
+        # Optionally use a snippet of the text if it's short
+        candidate_text = element.text_content().strip()  # Use text_content() in Playwright
+        if candidate_text and len(candidate_text) < 20:
+            return f"{page_key}_golden_{element.evaluate('el => el.tagName.toLowerCase()')}_{candidate_text.replace(' ', '_')}"
+
+    sanitized_selector = original_selector.replace("/", "_").replace("[", "").replace("]", "").replace("@", "")
+    return f"{page_key}_golden_{sanitized_selector}"
+
+
+# --- Core Self-Healing Functions (Heuristic Only) ---
+def capture_element_attributes(element):
+    """
+    Capture stable attributes of the element along with its parent's attributes.
+    Returns a dictionary of attributes.
+    """
+    attributes = {
+        'tag': element.evaluate("el => el.tagName.toLowerCase()"),
+        'id': element.get_attribute('id'),
+        'class': element.get_attribute('class'),
+        'name': element.get_attribute('name'),
+        'data-testid': element.get_attribute('data-testid'),
+        'text': element.text_content().strip()  # Use text_content() here
+    }
+    if attributes['tag'] == 'div':
+        attributes['innerHTML'] = element.get_attribute('innerHTML').strip()
+
+    # Capture parent's attributes
+    try:
+        parent = element.query_selector("xpath=..")
+        attributes['parent'] = {
+            'tag': parent.evaluate("el => el.tagName.toLowerCase()"),
+            'id': parent.get_attribute('id'),
+            'class': parent.get_attribute('class'),
+            'name': parent.get_attribute('name'),
+            'data-testid': parent.get_attribute('data-testid')
         }
-        """
-        page.evaluate(js_code)
+    except Exception:
+        attributes['parent'] = None
+    return attributes
 
-        print(f"Browser launched and recording events on {website}.")
-        print("Interact with the page. When finished, press Enter in this terminal to stop recording...")
-        input()
 
-        print("Stopping recording and closing browser...")
-        browser.close()
+def compute_similarity(golden, candidate):
+    """
+    Compute a heuristic similarity score between the golden attributes and a candidate element.
+    Higher scores indicate a better match.
+    """
+    score = 0
+    candidate_tag = candidate.evaluate("el => el.tagName.toLowerCase()")
+    if candidate_tag != golden['tag']:
+        return 0
+    if candidate.get_attribute("id") == golden.get("id"):
+        score += 10
+    if candidate.get_attribute("name") == golden.get("name"):
+        score += 10
+    if candidate.get_attribute("data-testid") == golden.get("data-testid"):
+        score += 8
+    if candidate.get_attribute("class") == golden.get("class"):
+        score += 5
+    candidate_text = candidate.text_content().strip()
+    if candidate_text and golden.get("text") and golden["text"] in candidate_text:
+        score += 3
+    if golden.get("innerHTML"):
+        candidate_innerHTML = candidate.get_attribute("innerHTML").strip()
+        if candidate_innerHTML and golden["innerHTML"] in candidate_innerHTML:
+            score += 2
+    # --- Parent Attribute Similarity ---
+    try:
+        candidate_parent = candidate.query_selector("xpath=..")
+        golden_parent = golden.get("parent")
+        if golden_parent:
+            candidate_parent_tag = candidate_parent.evaluate("el => el.tagName.toLowerCase()")
+            if candidate_parent_tag == golden_parent.get("tag", "").lower():
+                score += 2
+            if candidate_parent.get_attribute("id") == golden_parent.get("id"):
+                score += 5
+            if candidate_parent.get_attribute("class") == golden_parent.get("class"):
+                score += 3
+    except Exception:
+        pass
+    return score
 
-    print("\nRecorded events:")
-    for event in recorded_events:
-        print(event)
 
-    test_script = generate_test_script(recorded_events, website)
-    with open("generated_test.py", "w") as f:
-        f.write(test_script)
+def get_all_candidates(page, golden):
+    """
+    Returns all candidate elements having the same tag as specified in the golden attributes.
+    In Playwright, we use query_selector_all with the tag as a CSS selector.
+    """
+    tag = golden.get("tag", "*")
+    selector = tag if tag != "*" else "*"
+    return page.query_selector_all(selector)
 
-    print("\nTest script generated and saved as 'generated_test.py'.")
-    print("Run it with: python generated_test.py")
 
-if __name__ == "__main__":
-    main()
+def generate_selector(candidate):
+    """
+    Generates a new XPath selector for a candidate element using its stable attributes.
+    """
+    candidate_id = candidate.get_attribute("id")
+    if candidate_id:
+        return f"//*[@id='{candidate_id}']"
+    candidate_testid = candidate.get_attribute("data-testid")
+    if candidate_testid:
+        return f"//*[@data-testid='{candidate_testid}']"
+    candidate_placeholder = candidate.get_attribute("placeholder")
+    if candidate_placeholder:
+        return f"//{candidate.evaluate('el => el.tagName.toLowerCase()')}[@placeholder='{candidate_placeholder}']"
+    candidate_text = candidate.text_content().strip()
+    if candidate_text:
+        return f"//{candidate.evaluate('el => el.tagName.toLowerCase()')}[contains(text(), '{candidate_text}')]"
+    candidate_class = candidate.get_attribute("class")
+    if candidate_class:
+        classes = candidate_class.split()
+        return candidate.evaluate("el => el.tagName.toLowerCase()") + "." + ".".join(classes)
+    return f"//{candidate.evaluate('el => el.tagName.toLowerCase()')}"
+
+
+def self_heal(selector, page):
+    """
+    Given the original selector (a plain CSS selector) and the Playwright page,
+    this function:
+      1. Loads the golden reference from the golden file (or captures it if missing).
+      2. Uses a heuristic search to get all candidate elements (of the same tag).
+      3. Computes a similarity score for each candidate.
+      4. Returns the new (best) selector.
+      5. Updates the golden file with new attributes.
+    """
+    golden_data = load_global_golden_data()
+    golden_key = generate_golden_identifier(page, selector)
+    if golden_key not in golden_data:
+        try:
+            element = page.query_selector(selector)
+            if element is None:
+                raise Exception(f"No element found for selector '{selector}'")
+            golden = capture_element_attributes(element)
+            golden_data[golden_key] = golden
+            store_global_golden_data(golden_data)
+        except Exception as e:
+            raise Exception(f"Cannot capture golden reference for selector '{selector}': {e}")
+    else:
+        golden = golden_data[golden_key]
+    candidates = get_all_candidates(page, golden)
+    if not candidates:
+        raise Exception("No candidate elements found with tag: " + golden.get("tag", "*"))
+    scores = [compute_similarity(golden, candidate) for candidate in candidates]
+    best_index = int(np.argmax(scores))
+    chosen_candidate = candidates[best_index]
+    new_selector = generate_selector(chosen_candidate)
+    element = page.query_selector(new_selector)
+    if element:
+        print("Self-healing successful. New selector:", new_selector)
+        golden_data[golden_key] = capture_element_attributes(chosen_candidate)
+        store_global_golden_data(golden_data)
+        return new_selector
+    else:
+        raise Exception("Self-healing failed: the generated selector did not locate an element.")
+
+
+def get_updated_locator(page, original_selector):
+    """
+    Returns the original locator if it locates an element;
+    Otherwise, triggers self-healing and returns the new locator.
+    """
+    element = page.query_selector(original_selector)
+    if element:
+        return original_selector
+    else:
+        print("Original locator failed; triggering self-healing.")
+        return self_heal(original_selector, page)
